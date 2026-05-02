@@ -1,4 +1,3 @@
-import itertools
 import time
 
 class Job:
@@ -31,47 +30,90 @@ jobs = [
 ]
 
 
+def ordenar_por_deadline(lista):
+    lista = lista[:]
+    n = len(lista)
+
+    for i in range(n):
+        for j in range(0, n - i - 1):
+            if lista[j].deadline > lista[j + 1].deadline:
+                lista[j], lista[j + 1] = lista[j + 1], lista[j]
+
+    return lista
+
+
 def is_feasible(subset):
-    subset = sorted(subset, key=lambda j: j.deadline)
-    t = 0
-    for j in subset:
-        t += j.duration
-        if t > j.deadline:
+    subset = ordenar_por_deadline(subset)
+
+    tiempo = 0
+    for job in subset:
+        tiempo += job.duration
+        if tiempo > job.deadline:
             return False
+
     return True
 
 
-def brute_force(jobs):
-    best_profit = 0
-    best_subset = []
+def calcular_ganancia(subset):
+    total = 0
+    for job in subset:
+        total += job.profit
+    return total
 
-    n = len(jobs)
 
-    for r in range(n + 1):
-        for subset in itertools.combinations(jobs, r):
-            if is_feasible(subset):
-                profit = sum(j.profit for j in subset)
-                if profit > best_profit:
-                    best_profit = profit
-                    best_subset = list(subset)
+def brute_force_backtracking(jobs):
+    mejor = {
+        "profit": 0,
+        "subset": []
+    }
 
-    best_subset = sorted(best_subset, key=lambda j: j.deadline)
-    return best_subset, best_profit
+    def backtrack(i, actual):
+        if i == len(jobs):
+            if is_feasible(actual):
+                ganancia = calcular_ganancia(actual)
+                if ganancia > mejor["profit"]:
+                    mejor["profit"] = ganancia
+                    mejor["subset"] = actual[:]
+            return
+
+        backtrack(i + 1, actual)
+
+        actual.append(jobs[i])
+        backtrack(i + 1, actual)
+        actual.pop()
+
+    backtrack(0, [])
+
+    mejor["subset"] = ordenar_por_deadline(mejor["subset"])
+    return mejor["subset"], mejor["profit"]
 
 
 def dp_exacta(jobs):
-    jobs = sorted(jobs, key=lambda j: j.deadline)
+    trabajos = ordenar_por_deadline(jobs)
 
-    n = len(jobs)
-    max_deadline = max(j.deadline for j in jobs)
+    n = len(trabajos)
 
-    dp = [[0] * (max_deadline + 1) for _ in range(n + 1)]
-    tomar = [[False] * (max_deadline + 1) for _ in range(n + 1)]
+    H = 0
+    for job in trabajos:
+        if job.deadline > H:
+            H = job.deadline
+
+    dp = []
+    tomar = []
+
+    for i in range(n + 1):
+        fila_dp = []
+        fila_tomar = []
+        for t in range(H + 1):
+            fila_dp.append(0)
+            fila_tomar.append(False)
+        dp.append(fila_dp)
+        tomar.append(fila_tomar)
 
     for i in range(1, n + 1):
-        job = jobs[i - 1]
+        job = trabajos[i - 1]
 
-        for t in range(max_deadline + 1):
+        for t in range(H + 1):
             dp[i][t] = dp[i - 1][t]
 
             if job.duration <= t and t <= job.deadline:
@@ -81,39 +123,44 @@ def dp_exacta(jobs):
                     dp[i][t] = valor
                     tomar[i][t] = True
 
-    best_time = max(range(max_deadline + 1), key=lambda t: dp[n][t])
-    best_profit = dp[n][best_time]
+    best_time = 0
+    best_profit = 0
+
+    for t in range(H + 1):
+        if dp[n][t] > best_profit:
+            best_profit = dp[n][t]
+            best_time = t
 
     seleccion = []
     t = best_time
 
     for i in range(n, 0, -1):
         if tomar[i][t]:
-            job = jobs[i - 1]
+            job = trabajos[i - 1]
             seleccion.append(job)
             t -= job.duration
 
-    seleccion.reverse()
+    seleccion = seleccion[::-1]
     return seleccion, best_profit
 
 
 if __name__ == "__main__":
-    print("=== JOB SEQUENCING CON DURACIONES VARIABLES ===")
+    print("=== JOB SEQUENCING CRUDO - PYTHON ===")
 
     inicio = time.perf_counter()
-    sol_fb, val_fb = brute_force(jobs)
+    sol_fb, val_fb = brute_force_backtracking(jobs)
     t_fb = (time.perf_counter() - inicio) * 1000
 
     inicio = time.perf_counter()
     sol_dp, val_dp = dp_exacta(jobs)
     t_dp = (time.perf_counter() - inicio) * 1000
 
-    print("\nFuerza Bruta:")
-    print("Selección:", sol_fb)
+    print("\nFuerza Bruta / Backtracking:")
+    print("Seleccion:", sol_fb)
     print("Ganancia :", val_fb)
     print(f"Tiempo   : {t_fb:.6f} ms")
 
     print("\nDP Exacta:")
-    print("Selección:", sol_dp)
+    print("Seleccion:", sol_dp)
     print("Ganancia :", val_dp)
     print(f"Tiempo   : {t_dp:.6f} ms")
