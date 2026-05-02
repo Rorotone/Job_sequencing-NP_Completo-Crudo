@@ -1,78 +1,145 @@
 #include <iostream>
-#include <vector>
-#include <algorithm>
 #include <chrono>
 
 using namespace std;
 
 struct Job {
-    string id;
+    char id;
     int duration;
     int deadline;
     int profit;
 };
 
-bool isFeasible(vector<Job> subset) {
-    sort(subset.begin(), subset.end(), [](const Job& a, const Job& b) {
-        return a.deadline < b.deadline;
-    });
+const int N = 15;
+const int MAX_H = 100;
 
-    int t = 0;
-    for (const auto& j : subset) {
-        t += j.duration;
-        if (t > j.deadline) return false;
+Job jobs[N] = {
+    {'A', 3, 4, 100},
+    {'B', 2, 3, 19},
+    {'C', 5, 7, 27},
+    {'D', 1, 2, 25},
+    {'E', 4, 6, 15},
+    {'F', 2, 5, 30},
+    {'G', 6, 8, 50},
+    {'H', 3, 10, 60},
+    {'I', 7, 9, 20},
+    {'J', 4, 7, 45},
+    {'K', 2, 4, 35},
+    {'L', 5, 12, 80},
+    {'M', 3, 5, 40},
+    {'N', 4, 8, 55},
+    {'O', 1, 3, 22}
+};
+
+void copiar(Job origen[], Job destino[], int n) {
+    for (int i = 0; i < n; i++) {
+        destino[i] = origen[i];
     }
+}
+
+void ordenarPorDeadline(Job arr[], int n) {
+    for (int i = 0; i < n - 1; i++) {
+        for (int j = 0; j < n - i - 1; j++) {
+            if (arr[j].deadline > arr[j + 1].deadline) {
+                Job temp = arr[j];
+                arr[j] = arr[j + 1];
+                arr[j + 1] = temp;
+            }
+        }
+    }
+}
+
+bool isFeasible(Job subset[], int size) {
+    Job copia[N];
+    copiar(subset, copia, size);
+    ordenarPorDeadline(copia, size);
+
+    int tiempo = 0;
+
+    for (int i = 0; i < size; i++) {
+        tiempo += copia[i].duration;
+
+        if (tiempo > copia[i].deadline) {
+            return false;
+        }
+    }
+
     return true;
 }
 
-pair<vector<Job>, int> bruteForce(const vector<Job>& jobs) {
-    int n = jobs.size();
-    int bestProfit = 0;
-    vector<Job> bestSubset;
+int calcularGanancia(Job subset[], int size) {
+    int total = 0;
 
-    for (int mask = 0; mask < (1 << n); mask++) {
-        vector<Job> subset;
-        int profit = 0;
-
-        for (int i = 0; i < n; i++) {
-            if (mask & (1 << i)) {
-                subset.push_back(jobs[i]);
-                profit += jobs[i].profit;
-            }
-        }
-
-        if (isFeasible(subset) && profit > bestProfit) {
-            bestProfit = profit;
-            bestSubset = subset;
-        }
+    for (int i = 0; i < size; i++) {
+        total += subset[i].profit;
     }
 
-    sort(bestSubset.begin(), bestSubset.end(), [](const Job& a, const Job& b) {
-        return a.deadline < b.deadline;
-    });
-
-    return {bestSubset, bestProfit};
+    return total;
 }
 
-pair<vector<Job>, int> dpExacta(vector<Job> jobs) {
-    sort(jobs.begin(), jobs.end(), [](const Job& a, const Job& b) {
-        return a.deadline < b.deadline;
-    });
+Job actual[N];
+Job mejor[N];
 
-    int n = jobs.size();
-    int maxDeadline = 0;
+int actualSize = 0;
+int mejorSize = 0;
+int mejorGanancia = 0;
 
-    for (const auto& j : jobs) {
-        maxDeadline = max(maxDeadline, j.deadline);
+void backtracking(int i) {
+    if (i == N) {
+        if (isFeasible(actual, actualSize)) {
+            int ganancia = calcularGanancia(actual, actualSize);
+
+            if (ganancia > mejorGanancia) {
+                mejorGanancia = ganancia;
+                mejorSize = actualSize;
+
+                for (int k = 0; k < actualSize; k++) {
+                    mejor[k] = actual[k];
+                }
+            }
+        }
+        return;
     }
 
-    vector<vector<int>> dp(n + 1, vector<int>(maxDeadline + 1, 0));
-    vector<vector<bool>> tomar(n + 1, vector<bool>(maxDeadline + 1, false));
+    // No tomar el trabajo i
+    backtracking(i + 1);
 
-    for (int i = 1; i <= n; i++) {
-        Job job = jobs[i - 1];
+    // Tomar el trabajo i
+    actual[actualSize] = jobs[i];
+    actualSize++;
 
-        for (int t = 0; t <= maxDeadline; t++) {
+    backtracking(i + 1);
+
+    actualSize--;
+}
+
+void dpExacta(Job seleccion[], int& seleccionSize, int& gananciaFinal) {
+    Job trabajos[N];
+    copiar(jobs, trabajos, N);
+    ordenarPorDeadline(trabajos, N);
+
+    int H = 0;
+
+    for (int i = 0; i < N; i++) {
+        if (trabajos[i].deadline > H) {
+            H = trabajos[i].deadline;
+        }
+    }
+
+    int dp[N + 1][MAX_H + 1];
+    bool tomar[N + 1][MAX_H + 1];
+
+    for (int i = 0; i <= N; i++) {
+        for (int t = 0; t <= H; t++) {
+            dp[i][t] = 0;
+            tomar[i][t] = false;
+        }
+    }
+
+    for (int i = 1; i <= N; i++) {
+        Job job = trabajos[i - 1];
+
+        for (int t = 0; t <= H; t++) {
             dp[i][t] = dp[i - 1][t];
 
             if (job.duration <= t && t <= job.deadline) {
@@ -89,79 +156,80 @@ pair<vector<Job>, int> dpExacta(vector<Job> jobs) {
     int bestTime = 0;
     int bestProfit = 0;
 
-    for (int t = 0; t <= maxDeadline; t++) {
-        if (dp[n][t] > bestProfit) {
-            bestProfit = dp[n][t];
+    for (int t = 0; t <= H; t++) {
+        if (dp[N][t] > bestProfit) {
+            bestProfit = dp[N][t];
             bestTime = t;
         }
     }
 
-    vector<Job> seleccion;
+    Job temp[N];
+    int tempSize = 0;
     int t = bestTime;
 
-    for (int i = n; i > 0; i--) {
+    for (int i = N; i > 0; i--) {
         if (tomar[i][t]) {
-            Job job = jobs[i - 1];
-            seleccion.push_back(job);
+            Job job = trabajos[i - 1];
+            temp[tempSize] = job;
+            tempSize++;
             t -= job.duration;
         }
     }
 
-    reverse(seleccion.begin(), seleccion.end());
-    return {seleccion, bestProfit};
+    seleccionSize = 0;
+
+    for (int i = tempSize - 1; i >= 0; i--) {
+        seleccion[seleccionSize] = temp[i];
+        seleccionSize++;
+    }
+
+    gananciaFinal = bestProfit;
 }
 
-void imprimirSeleccion(const vector<Job>& seleccion) {
-    for (const auto& j : seleccion) {
-        cout << j.id << "(p=" << j.duration
-             << ", d=" << j.deadline
-             << ", w=" << j.profit << ") ";
+void imprimir(Job arr[], int size) {
+    for (int i = 0; i < size; i++) {
+        cout << arr[i].id
+             << "(p=" << arr[i].duration
+             << ", d=" << arr[i].deadline
+             << ", w=" << arr[i].profit << ") ";
     }
     cout << endl;
 }
 
 int main() {
-    vector<Job> jobs = {
-        {"A", 3, 4, 100},
-        {"B", 2, 3, 19},
-        {"C", 5, 7, 27},
-        {"D", 1, 2, 25},
-        {"E", 4, 6, 15},
-        {"F", 2, 5, 30},
-        {"G", 6, 8, 50},
-        {"H", 3, 10, 60},
-        {"I", 7, 9, 20},
-        {"J", 4, 7, 45},
-        {"K", 2, 4, 35},
-        {"L", 5, 12, 80},
-        {"M", 3, 5, 40},
-        {"N", 4, 8, 55},
-        {"O", 1, 3, 22}
-    };
-
     cout << "=== JOB SEQUENCING CON DURACIONES VARIABLES - C++ ===\n";
 
     auto start = chrono::high_resolution_clock::now();
-    auto fb = bruteForce(jobs);
+
+    backtracking(0);
+
     auto end = chrono::high_resolution_clock::now();
-    double tFB = chrono::duration<double, milli>(end - start).count();
+    double tiempoFB = chrono::duration<double, milli>(end - start).count();
+
+    ordenarPorDeadline(mejor, mejorSize);
+
+    Job seleccionDP[N];
+    int seleccionDPSize = 0;
+    int gananciaDP = 0;
 
     start = chrono::high_resolution_clock::now();
-    auto dp = dpExacta(jobs);
-    end = chrono::high_resolution_clock::now();
-    double tDP = chrono::duration<double, milli>(end - start).count();
 
-    cout << "\nFuerza Bruta:\n";
+    dpExacta(seleccionDP, seleccionDPSize, gananciaDP);
+
+    end = chrono::high_resolution_clock::now();
+    double tiempoDP = chrono::duration<double, milli>(end - start).count();
+
+    cout << "\nFuerza Bruta / Backtracking:\n";
     cout << "Seleccion: ";
-    imprimirSeleccion(fb.first);
-    cout << "Ganancia : " << fb.second << endl;
-    cout << "Tiempo   : " << tFB << " ms\n";
+    imprimir(mejor, mejorSize);
+    cout << "Ganancia : " << mejorGanancia << endl;
+    cout << "Tiempo   : " << tiempoFB << " ms\n";
 
     cout << "\nDP Exacta:\n";
     cout << "Seleccion: ";
-    imprimirSeleccion(dp.first);
-    cout << "Ganancia : " << dp.second << endl;
-    cout << "Tiempo   : " << tDP << " ms\n";
+    imprimir(seleccionDP, seleccionDPSize);
+    cout << "Ganancia : " << gananciaDP << endl;
+    cout << "Tiempo   : " << tiempoDP << " ms\n";
 
     return 0;
 }
